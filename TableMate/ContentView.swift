@@ -8,9 +8,9 @@ struct ContentView: View {
                     Label("Home", systemImage: "house")
                 }
             
-            SearchView()
+            FriendsView()
                 .tabItem {
-                    Label("Search", systemImage: "magnifyingglass")
+                    Label("Friends", systemImage: "person.2")
                 }
             
             AddItemView()
