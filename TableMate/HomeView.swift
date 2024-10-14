@@ -364,18 +364,23 @@ struct FeaturedRestaurantCard: View {
                                         VStack(alignment: .leading) {
                                             Text(business.name)
                                                 .font(.custom("Didot", size: 18).weight(.semibold))
-                                                .foregroundColor(.white)
+                                                .foregroundColor(.black) // Changed to black
+                                                .padding(.bottom, 2)
+                                            
                                             HStack {
                                                 Image(systemName: "star.fill")
                                                     .foregroundColor(.yellow)
                                                 Text(String(format: "%.1f", business.rating))
                                                     .font(.custom("Avenir", size: 12).weight(.medium))
-                                                    .foregroundColor(.white)
+                                                    .foregroundColor(.black) // Changed to black
                                             }
                                         }
                                         Spacer()
                                     }
                                     .padding()
+                                    .background(Color.white.opacity(0.7)) // Added semi-transparent background
+                                    .cornerRadius(8)
+                                    .padding([.leading, .bottom, .trailing], 8)
                                 }
                             )
                     case .failure:
