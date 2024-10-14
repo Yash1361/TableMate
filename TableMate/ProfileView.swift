@@ -1,8 +1,10 @@
 import SwiftUI
+import EventKit
 
 struct ProfileView: View {
     @State private var user = User.sampleUser
     @State private var isEditingAvailability = false
+    @State private var isSyncingCalendar = false
     
     var body: some View {
         ScrollView {
@@ -19,6 +21,16 @@ struct ProfileView: View {
         .navigationBarTitle("Profile", displayMode: .inline)
         .sheet(isPresented: $isEditingAvailability) {
             AvailabilityEditView(availability: $user.availability)
+        }
+        .alert(isPresented: $isSyncingCalendar) {
+            Alert(
+                title: Text("Sync Calendar"),
+                message: Text("Do you want to sync your availability with your Apple Calendar?"),
+                primaryButton: .default(Text("Sync")) {
+                    syncAppleCalendar()
+                },
+                secondaryButton: .cancel()
+            )
         }
     }
     
@@ -75,6 +87,18 @@ struct ProfileView: View {
                     }
                 }
             }
+            
+            Button(action: {
+                isSyncingCalendar = true
+            }) {
+                HStack {
+                    Image(systemName: "calendar.badge.plus")
+                    Text("Sync with Apple Calendar")
+                }
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundColor(.blue)
+            }
+            .padding(.top, 10)
         }
         .padding()
         .background(Color(.systemBackground))
@@ -161,6 +185,75 @@ struct ProfileView: View {
         .background(Color(.systemBackground))
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+    }
+    
+    private func syncAppleCalendar() {
+        let eventStore = EKEventStore()
+        eventStore.requestAccess(to: .event) { granted, error in
+            if granted {
+                DispatchQueue.main.async {
+                    let calendar = Calendar.current
+                    let now = Date()
+                    let oneWeekLater = calendar.date(byAdding: .weekOfYear, value: 1, to: now)!
+                    
+                    let predicate = eventStore.predicateForEvents(withStart: now, end: oneWeekLater, calendars: nil)
+                    let events = eventStore.events(matching: predicate)
+                    
+                    self.updateAvailabilityFromEvents(events)
+                }
+            } else {
+                print("Access denied")
+            }
+        }
+    }
+    
+    private func updateAvailabilityFromEvents(_ events: [EKEvent]) {
+        var newAvailability: [DayOfWeek: [ClosedRange<Date>]] = [:]
+        
+        for event in events {
+            guard let startDate = event.startDate,
+                  let endDate = event.endDate else {
+                continue
+            }
+            
+            if let day = DayOfWeek(rawValue: startDate.dayOfWeek.lowercased()) {
+                if newAvailability[day] == nil {
+                    newAvailability[day] = []
+                }
+                newAvailability[day]?.append(startDate...endDate)
+            }
+        }
+        
+        // Merge overlapping time slots and invert to get free time
+        for (day, busySlots) in newAvailability {
+            let freeSlots = invertTimeSlots(busySlots)
+            newAvailability[day] = freeSlots
+        }
+        
+        user.availability = newAvailability
+    }
+    
+    private func invertTimeSlots(_ busySlots: [ClosedRange<Date>]) -> [ClosedRange<Date>] {
+        let sortedSlots = busySlots.sorted { $0.lowerBound < $1.lowerBound }
+        var freeSlots: [ClosedRange<Date>] = []
+        let calendar = Calendar.current
+        
+        let startOfDay = calendar.startOfDay(for: Date())
+        var lastEndTime = calendar.date(bySettingHour: 0, minute: 0, second: 0, of: startOfDay)!
+        
+        for slot in sortedSlots {
+            if lastEndTime < slot.lowerBound {
+                freeSlots.append(lastEndTime...slot.lowerBound)
+            }
+            lastEndTime = max(lastEndTime, slot.upperBound)
+        }
+        
+        let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: startOfDay)!
+        if lastEndTime < endOfDay {
+            freeSlots.append(lastEndTime...endOfDay)
+        }
+        
+        return freeSlots
     }
 }
 
@@ -435,6 +528,12 @@ extension Date {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.date(from: string) ?? Date()
+    }
+    
+    var dayOfWeek: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: self)
     }
 }
 

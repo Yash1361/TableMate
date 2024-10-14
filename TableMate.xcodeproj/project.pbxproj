@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		089334A02CBCD15900F9A89F /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 0893349F2CBCD15900F9A89F /* GoogleSignIn */; };
+		089334A22CBCD15900F9A89F /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 089334A12CBCD15900F9A89F /* GoogleSignInSwift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		089334722CBB3EE300F9A89F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,9 +34,22 @@
 		0893347B2CBB3EE300F9A89F /* TableMateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TableMateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		089334A42CBCD27E00F9A89F /* Exceptions for "TableMate" folder in "TableMate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 089334602CBB3EE200F9A89F /* TableMate */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		089334632CBB3EE200F9A89F /* TableMate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				089334A42CBCD27E00F9A89F /* Exceptions for "TableMate" folder in "TableMate" target */,
+			);
 			path = TableMate;
 			sourceTree = "<group>";
 		};
@@ -52,6 +70,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				089334A02CBCD15900F9A89F /* GoogleSignIn in Frameworks */,
+				089334A22CBCD15900F9A89F /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +132,8 @@
 			);
 			name = TableMate;
 			packageProductDependencies = (
+				0893349F2CBCD15900F9A89F /* GoogleSignIn */,
+				089334A12CBCD15900F9A89F /* GoogleSignInSwift */,
 			);
 			productName = TableMate;
 			productReference = 089334612CBB3EE200F9A89F /* TableMate.app */;
@@ -195,6 +217,10 @@
 			);
 			mainGroup = 089334582CBB3EE200F9A89F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0893349D2CBCCF1700F9A89F /* XCRemoteSwiftPackageReference "swift-algorithms" */,
+				0893349E2CBCD14100F9A89F /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 089334622CBB3EE200F9A89F /* Products */;
 			projectDirPath = "";
@@ -399,6 +425,8 @@
 				DEVELOPMENT_TEAM = W8AL9H4QRG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TableMate/Info.plist;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "We need access to your calendar to sync your availability.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -428,6 +456,8 @@
 				DEVELOPMENT_TEAM = W8AL9H4QRG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TableMate/Info.plist;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "We need access to your calendar to sync your availability.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -558,6 +588,36 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0893349D2CBCCF1700F9A89F /* XCRemoteSwiftPackageReference "swift-algorithms" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-algorithms.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.0;
+			};
+		};
+		0893349E2CBCD14100F9A89F /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0893349F2CBCD15900F9A89F /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GoogleSignIn;
+		};
+		089334A12CBCD15900F9A89F /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 089334592CBB3EE200F9A89F /* Project object */;
 }
