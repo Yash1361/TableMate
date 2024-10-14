@@ -1,325 +1,278 @@
 import SwiftUI
-import Charts
 
 struct ProfileView: View {
-    @State private var selectedEarningsTimeFrame: TimeFrame = .month
-    @State private var selectedSpendingsTimeFrame: TimeFrame = .month
-    @State private var isEditingProfile = false
-    @State private var showingSettings = false
-    
-    // Mock data
-    let user = User(name: "John Doe", email: "john.doe@example.com", joinDate: Date().addingTimeInterval(-365*24*60*60), rating: 4.8)
-    let earnings = [
-        Earning(date: Date().addingTimeInterval(-6*30*24*60*60), amount: 120),
-        Earning(date: Date().addingTimeInterval(-5*30*24*60*60), amount: 180),
-        Earning(date: Date().addingTimeInterval(-4*30*24*60*60), amount: 250),
-        Earning(date: Date().addingTimeInterval(-3*30*24*60*60), amount: 200),
-        Earning(date: Date().addingTimeInterval(-2*30*24*60*60), amount: 300),
-        Earning(date: Date().addingTimeInterval(-1*30*24*60*60), amount: 280)
-    ]
-    let spendings = [
-        Earning(date: Date().addingTimeInterval(-6*30*24*60*60), amount: 100),
-        Earning(date: Date().addingTimeInterval(-5*30*24*60*60), amount: 150),
-        Earning(date: Date().addingTimeInterval(-4*30*24*60*60), amount: 180),
-        Earning(date: Date().addingTimeInterval(-3*30*24*60*60), amount: 170),
-        Earning(date: Date().addingTimeInterval(-2*30*24*60*60), amount: 220),
-        Earning(date: Date().addingTimeInterval(-1*30*24*60*60), amount: 200)
-    ]
+    @State private var user = User.sampleUser
+    @State private var isEditingAvailability = false
+    @State private var isEditingPreferences = false
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 30) {
-                    headerSection
-                    statsSection
-                    earningsSection
-                    spendingsSection
-                    activitySection
-                }
-                .padding()
+        ScrollView {
+            VStack(spacing: 30) {
+                profileHeader
+                availabilitySection
+                preferredDaysSection
+                favoriteCuisinesSection
+                preferencesSection
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(.primary)
-                    }
-                }
-            }
+            .padding()
         }
-        .sheet(isPresented: $isEditingProfile) {
-            EditProfileView(user: user)
+        .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all))
+        .navigationBarTitle("Profile", displayMode: .inline)
+        .sheet(isPresented: $isEditingAvailability) {
+            AvailabilityEditView(availability: $user.availability)
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
+        .sheet(isPresented: $isEditingPreferences) {
+            PreferencesEditView(user: $user)
         }
     }
     
-    private var headerSection: some View {
-        VStack(spacing: 20) {
-            RemoteImage(url: "https://picsum.photos/200", id: UUID())
+    private var profileHeader: some View {
+        VStack(spacing: 15) {
+            Image(systemName: "person.circle.fill")
+                .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 120, height: 120)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white, lineWidth: 4))
                 .shadow(radius: 10)
             
-            VStack(spacing: 8) {
-                Text(user.name)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text(user.email)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                HStack {
-                    ForEach(0..<5) { index in
-                        Image(systemName: index < Int(user.rating) ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
+            Text(user.name)
+                .font(.system(size: 24, weight: .bold, design: .serif))
+            
+            Text(user.tag)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+                .foregroundColor(.blue)
+                .cornerRadius(20)
+        }
+    }
+    
+    private var availabilitySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "My Availability", action: { isEditingAvailability = true })
+            
+            ForEach(DayOfWeek.allCases, id: \.self) { day in
+                if let timeSlots = user.availability[day], !timeSlots.isEmpty {
+                    HStack {
+                        Text(day.fullName)
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .frame(width: 100, alignment: .leading)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(timeSlots, id: \.self) { slot in
+                                    TimeSlotPill(slot: slot)
+                                }
+                            }
+                        }
                     }
-                    Text(String(format: "%.1f", user.rating))
-                        .fontWeight(.medium)
                 }
-                .font(.footnote)
-                
-                Text("Member since \(user.joinDate.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Button(action: { isEditingProfile = true }) {
-                Text("Edit Profile")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 20)
-                    .background(Color.blue)
-                    .cornerRadius(25)
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
     
-    private var statsSection: some View {
-        HStack(spacing: 15) {
-            StatCard(title: "Tools", value: "12", icon: "wrench.fill", color: .blue)
-            StatCard(title: "Rentals", value: "28", icon: "cart.fill", color: .green)
-            StatCard(title: "Reviews", value: "47", icon: "star.fill", color: .yellow)
+    private var preferredDaysSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Preferred Days", action: { isEditingPreferences = true })
+            
+            FlowLayout(spacing: 8) {
+                ForEach(DayOfWeek.allCases, id: \.self) { day in
+                    DayPill(day: day, isSelected: user.preferredDays.contains(day))
+                }
+            }
         }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
     
-    private var earningsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Earnings")
-                .font(.title3)
-                .fontWeight(.semibold)
+    private var favoriteCuisinesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Favorite Cuisines", action: { isEditingPreferences = true })
             
-            Picker("Time Frame", selection: $selectedEarningsTimeFrame) {
-                ForEach(TimeFrame.allCases, id: \.self) { timeFrame in
-                    Text(timeFrame.rawValue).tag(timeFrame)
+            FlowLayout(spacing: 8) {
+                ForEach(CuisineType.allCases, id: \.self) { cuisine in
+                    CuisinePill(cuisine: cuisine, isSelected: user.favoriteCuisines.contains(cuisine))
                 }
             }
-            .pickerStyle(SegmentedPickerStyle())
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(15)
+        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+    }
+    
+    private var preferencesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Preferences", action: { isEditingPreferences = true })
             
-            Chart {
-                ForEach(earnings) { earning in
-                    BarMark(
-                        x: .value("Month", earning.date, unit: .month),
-                        y: .value("Amount", earning.amount)
-                    )
-                    .foregroundStyle(Color.blue.gradient)
-                }
-            }
-            .frame(height: 200)
+            Toggle("Open to meeting new people", isOn: $user.isOpenToMeetingNewPeople)
+                .font(.system(size: 16, design: .rounded))
+            
+            Toggle("Notify me about new events", isOn: $user.notifyAboutNewEvents)
+                .font(.system(size: 16, design: .rounded))
             
             HStack {
-                VStack(alignment: .leading) {
-                    Text("Total Earnings")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("$\(earnings.map { $0.amount }.reduce(0, +))")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
-                }
+                Text("Preferred group size:")
+                    .font(.system(size: 16, design: .rounded))
                 Spacer()
-                VStack(alignment: .trailing) {
-                    Text("Avg. per \(selectedEarningsTimeFrame.rawValue)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("$\(earnings.map { $0.amount }.reduce(0, +) / earnings.count)")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.green)
-                }
+                Text("\(user.preferredGroupSize) people")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
             }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-    }
-    
-    private var spendingsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Spendings")
-                .font(.title3)
-                .fontWeight(.semibold)
-            
-            Picker("Time Frame", selection: $selectedSpendingsTimeFrame) {
-                ForEach(TimeFrame.allCases, id: \.self) { timeFrame in
-                    Text(timeFrame.rawValue).tag(timeFrame)
-                }
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            
-            Chart {
-                ForEach(spendings) { spending in
-                    BarMark(
-                        x: .value("Month", spending.date, unit: .month),
-                        y: .value("Amount", spending.amount)
-                    )
-                    .foregroundStyle(Color.red.gradient)
-                }
-            }
-            .frame(height: 200)
             
             HStack {
-                VStack(alignment: .leading) {
-                    Text("Total Spendings")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("$\(spendings.map { $0.amount }.reduce(0, +))")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.red)
-                }
+                Text("Max travel distance:")
+                    .font(.system(size: 16, design: .rounded))
                 Spacer()
-                VStack(alignment: .trailing) {
-                    Text("Avg. per \(selectedSpendingsTimeFrame.rawValue)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("$\(spendings.map { $0.amount }.reduce(0, +) / spendings.count)")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.green)
-                }
+                Text("\(user.maxTravelDistance) miles")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
             }
         }
         .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-    }
-    
-    private var activitySection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Recent Activity")
-                .font(.title3)
-                .fontWeight(.semibold)
-            
-            ForEach(0..<3) { _ in
-                ActivityRow()
-            }
-            
-            Button(action: {}) {
-                Text("View All Activity")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.blue)
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 30))
-                .foregroundColor(color)
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color(.systemBackground))
         .cornerRadius(15)
         .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
     }
 }
 
-struct ActivityRow: View {
+struct TimeSlotPill: View {
+    let slot: ClosedRange<Date>
+    
     var body: some View {
-        HStack(spacing: 15) {
-            Circle()
-                .fill(Color.blue.opacity(0.2))
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Image(systemName: "wrench.fill")
-                        .foregroundColor(.blue)
-                )
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Rented out Power Drill")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                Text("2 days ago")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            Text("$25")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.green)
-        }
-        .padding(.vertical, 10)
+        Text(formatTimeSlot(slot))
+            .font(.system(size: 14, design: .rounded))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.blue.opacity(0.1))
+            .foregroundColor(.blue)
+            .cornerRadius(15)
+    }
+    
+    private func formatTimeSlot(_ slot: ClosedRange<Date>) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return "\(formatter.string(from: slot.lowerBound)) - \(formatter.string(from: slot.upperBound))"
     }
 }
 
-struct EditProfileView: View {
-    let user: User
+struct DayPill: View {
+    let day: DayOfWeek
+    let isSelected: Bool
+    
+    var body: some View {
+        Text(day.shortName)
+            .font(.system(size: 14, weight: .medium, design: .rounded))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
+            .foregroundColor(isSelected ? .white : .primary)
+            .cornerRadius(15)
+    }
+}
+
+struct CuisinePill: View {
+    let cuisine: CuisineType
+    let isSelected: Bool
+    
+    var body: some View {
+        HStack {
+            Text(cuisine.emoji)
+            Text(cuisine.rawValue)
+        }
+        .font(.system(size: 14, weight: .medium, design: .rounded))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
+        .foregroundColor(isSelected ? .white : .primary)
+        .cornerRadius(15)
+    }
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrangeSubviews(proposal: proposal, subviews: subviews)
+        let height = rows.map { $0.map { $0.height }.max() ?? 0 }.reduce(0, +) + CGFloat(rows.count - 1) * spacing
+        return CGSize(width: proposal.width ?? .zero, height: height)
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = arrangeSubviews(proposal: proposal, subviews: subviews)
+        var yOffset: CGFloat = 0
+        for row in rows {
+            var xOffset: CGFloat = 0
+            for column in row {
+                let subview = subviews[column.index]
+                subview.place(at: CGPoint(x: bounds.minX + xOffset, y: bounds.minY + yOffset), proposal: .unspecified)
+                xOffset += column.width + spacing
+            }
+            yOffset += (row.map { $0.height }.max() ?? 0) + spacing
+        }
+    }
+    
+    private func arrangeSubviews(proposal: ProposedViewSize, subviews: Subviews) -> [[ColumnData]] {
+        guard let maxWidth = proposal.width else { return [] }
+        var rows: [[ColumnData]] = [[]]
+        var currentX: CGFloat = 0
+        var currentRow = 0
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth, !rows[currentRow].isEmpty {
+                currentRow += 1
+                rows.append([])
+                currentX = 0
+            }
+            rows[currentRow].append(ColumnData(index: index, width: size.width, height: size.height))
+            currentX += size.width + spacing
+        }
+        return rows
+    }
+    
+    struct ColumnData {
+        let index: Int
+        let width: CGFloat
+        let height: CGFloat
+    }
+}
+
+struct AvailabilityEditView: View {
+    @Binding var availability: [DayOfWeek: [ClosedRange<Date>]]
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Personal Information")) {
-                    TextField("Name", text: .constant(user.name))
-                    TextField("Email", text: .constant(user.email))
-                }
-                
-                Section(header: Text("Notifications")) {
-                    Toggle("Email Notifications", isOn: .constant(true))
-                    Toggle("Push Notifications", isOn: .constant(true))
-                }
-                
-                Section(header: Text("Privacy")) {
-                    Toggle("Show Profile to Public", isOn: .constant(true))
-                    Toggle("Show Earnings", isOn: .constant(false))
+            List {
+                ForEach(DayOfWeek.allCases, id: \.self) { day in
+                    Section(header: Text(day.fullName)) {
+                        ForEach(availability[day] ?? [], id: \.self) { slot in
+                            TimeSlotEditor(slot: slot) { newSlot in
+                                if let index = availability[day]?.firstIndex(of: slot) {
+                                    availability[day]?[index] = newSlot
+                                }
+                            }
+                        }
+                        .onDelete { indexSet in
+                            availability[day]?.remove(atOffsets: indexSet)
+                        }
+                        
+                        Button(action: {
+                            let newSlot = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!...Calendar.current.date(bySettingHour: 13, minute: 0, second: 0, of: Date())!
+                            availability[day, default: []].append(newSlot)
+                        }) {
+                            Label("Add Time Slot", systemImage: "plus")
+                        }
+                    }
                 }
             }
-            .navigationTitle("Edit Profile")
+            .navigationBarTitle("Edit Availability", displayMode: .inline)
             .navigationBarItems(trailing: Button("Done") {
                 presentationMode.wrappedValue.dismiss()
             })
@@ -327,60 +280,174 @@ struct EditProfileView: View {
     }
 }
 
-struct SettingsView: View {
+struct TimeSlotEditor: View {
+    let slot: ClosedRange<Date>
+    let onEdit: (ClosedRange<Date>) -> Void
+    @State private var startTime: Date
+    @State private var endTime: Date
+    
+    init(slot: ClosedRange<Date>, onEdit: @escaping (ClosedRange<Date>) -> Void) {
+        self.slot = slot
+        self.onEdit = onEdit
+        _startTime = State(initialValue: slot.lowerBound)
+        _endTime = State(initialValue: slot.upperBound)
+    }
+    
+    var body: some View {
+        HStack {
+            DatePicker("Start", selection: $startTime, displayedComponents: .hourAndMinute)
+            DatePicker("End", selection: $endTime, displayedComponents: .hourAndMinute)
+        }
+        .onChange(of: startTime) { _ in updateSlot() }
+        .onChange(of: endTime) { _ in updateSlot() }
+    }
+    
+    private func updateSlot() {
+        onEdit(startTime...endTime)
+    }
+}
+
+struct PreferencesEditView: View {
+    @Binding var user: User
+    @Environment(\.presentationMode) var presentationMode
+    
     var body: some View {
         NavigationView {
-            List {
-                Section(header: Text("Account")) {
-                    NavigationLink("Change Password", destination: Text("Change Password View"))
-                    NavigationLink("Linked Accounts", destination: Text("Linked Accounts View"))
-                }
-                
-                Section(header: Text("Preferences")) {
-                    NavigationLink("Language", destination: Text("Language Selection View"))
-                    NavigationLink("Currency", destination: Text("Currency Selection View"))
-                }
-                
-                Section(header: Text("Support")) {
-                    NavigationLink("Help Center", destination: Text("Help Center View"))
-                    NavigationLink("Contact Us", destination: Text("Contact Us View"))
-                }
-                
-                Section {
-                    Button("Log Out") {
-                        // Perform logout action
+            Form {
+                Section(header: Text("Preferred Days")) {
+                    ForEach(DayOfWeek.allCases, id: \.self) { day in
+                        Toggle(day.fullName, isOn: Binding(
+                            get: { user.preferredDays.contains(day) },
+                            set: { newValue in
+                                if newValue {
+                                    user.preferredDays.insert(day)
+                                } else {
+                                    user.preferredDays.remove(day)
+                                }
+                            }
+                        ))
                     }
-                    .foregroundColor(.red)
+                }
+                
+                Section(header: Text("Favorite Cuisines")) {
+                    ForEach(CuisineType.allCases, id: \.self) { cuisine in
+                        Toggle(cuisine.rawValue, isOn: Binding(
+                            get: { user.favoriteCuisines.contains(cuisine) },
+                            set: { newValue in
+                                if newValue {
+                                    user.favoriteCuisines.insert(cuisine)
+                                } else {
+                                    user.favoriteCuisines.remove(cuisine)
+                                }
+                            }
+                        ))
+                    }
+                }
+                
+                Section(header: Text("Other Preferences")) {
+                    Toggle("Open to meeting new people", isOn: $user.isOpenToMeetingNewPeople)
+                    Toggle("Notify me about new events", isOn: $user.notifyAboutNewEvents)
+                    
+                    Stepper(value: $user.preferredGroupSize, in: 2...10) {
+                        Text("Preferred group size: \(user.preferredGroupSize)")
+                    }
+                    
+                    Stepper(value: $user.maxTravelDistance, in: 1...50) {
+                        Text("Max travel distance: \(user.maxTravelDistance) miles")
+                    }
                 }
             }
-            .navigationTitle("Settings")
+            .navigationBarTitle("Edit Preferences", displayMode: .inline)
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
         }
     }
 }
 
-// Data Models and Helper Enums
+enum DayOfWeek: String, CaseIterable {
+    case monday, tuesday, wednesday, thursday, friday, saturday, sunday
+    
+    var fullName: String {
+        self.rawValue.capitalized
+    }
+    
+    var shortName: String {
+        String(self.rawValue.prefix(3).capitalized)
+    }
+}
+
+enum CuisineType: String, CaseIterable {
+    case italian = "Italian"
+    case japanese = "Japanese"
+    case mexican = "Mexican"
+    case indian = "Indian"
+    case chinese = "Chinese"
+    case french = "French"
+    case american = "American"
+    case mediterranean = "Mediterranean"
+    case thai = "Thai"
+    case vietnamese = "Vietnamese"
+    
+    var emoji: String {
+        switch self {
+        case .italian: return "🍝"
+        case .japanese: return "🍣"
+        case .mexican: return "🌮"
+        case .indian: return "🍛"
+        case .chinese: return "🥡"
+        case .french: return "🥐"
+        case .american: return "🍔"
+        case .mediterranean: return "🥙"
+        case .thai: return "🍜"
+        case .vietnamese: return "🍲"
+        }
+    }
+}
+
 struct User {
-    let name: String
-    let email: String
-    let joinDate: Date
-    let rating: Double
+    var name: String
+    var tag: String
+    var availability: [DayOfWeek: [ClosedRange<Date>]]
+    var preferredDays: Set<DayOfWeek>
+    var favoriteCuisines: Set<CuisineType>
+    var isOpenToMeetingNewPeople: Bool
+    var notifyAboutNewEvents: Bool
+    var preferredGroupSize: Int
+    var maxTravelDistance: Int
+    
+    static var sampleUser: User {
+        User(
+            name: "Alice Johnson",
+            tag: "Foodie Explorer",
+            availability: [
+                .monday: [Date.parse("12:00")...Date.parse("14:00")],
+                .wednesday: [Date.parse("18:00")...Date.parse("21:00")],
+                .friday: [Date.parse("19:00")...Date.parse("22:00")],
+                .saturday: [Date.parse("11:00")...Date.parse("15:00"), Date.parse("18:00")...Date.parse("22:00")]
+            ],
+            preferredDays: [.friday, .saturday, .sunday],
+            favoriteCuisines: [.italian, .japanese, .mexican],
+            isOpenToMeetingNewPeople: true,
+            notifyAboutNewEvents: true,
+            preferredGroupSize: 4,
+            maxTravelDistance: 10
+        )
+    }
 }
 
-struct Earning: Identifiable {
-    let id = UUID()
-    let date: Date
-    let amount: Int
+extension Date {
+    static func parse(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.date(from: string) ?? Date()
+    }
 }
 
-enum TimeFrame: String, CaseIterable {
-    case week = "Week"
-    case month = "Month"
-    case year = "Year"
-}
-
-// Preview Provider
 struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
-        ProfileView()
+        NavigationView {
+            ProfileView()
+        }
     }
 }
