@@ -13,7 +13,7 @@ struct ContentView: View {
                     Label("Friends", systemImage: "person.2")
                 }
             
-            AddItemView()
+            AddEventView()
                 .tabItem {
                     Label("Add", systemImage: "plus.circle")
                 }

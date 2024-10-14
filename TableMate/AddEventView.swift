@@ -37,7 +37,7 @@ struct AddEventView: View {
                         case 2:
                             PreferencesView(userPreferences: $userPreferences)
                         case 3:
-                            EnhancedSummaryView(selectedFriends: selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences)
+                            EnhancedSummaryView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences)
                         default:
                             EmptyView()
                         }
@@ -513,7 +513,7 @@ struct DayAvailabilityView: View {
 }
 
 struct EnhancedSummaryView: View {
-    let selectedFriends: [Friend]
+    @Binding var selectedFriends: [Friend]
     @Binding var manualMembers: [ManualMember]
     let userPreferences: UserPreferences
     
@@ -522,88 +522,48 @@ struct EnhancedSummaryView: View {
             Text("Event Summary")
                 .font(.headline)
             
-            GroupMembersSummary(selectedFriends: selectedFriends, manualMembers: manualMembers)
-            
-            UserPreferencesSummary(preferences: userPreferences)
-            
-            if !manualMembers.isEmpty {
-                ManualMembersSummary(manualMembers: $manualMembers)
-            }
+            GroupMembersSummary(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences)
         }
     }
 }
 
 struct GroupMembersSummary: View {
-    let selectedFriends: [Friend]
-    let manualMembers: [ManualMember]
+    @Binding var selectedFriends: [Friend]
+    @Binding var manualMembers: [ManualMember]
+    let userPreferences: UserPreferences
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Group Members")
                 .font(.title3)
                 .fontWeight(.bold)
             
-            ForEach(selectedFriends) { friend in
-                HStack {
-                    Image(systemName: "person.circle.fill")
-                        .foregroundColor(.blue)
-                    Text(friend.name)
-                    Spacer()
-                    Text("From Friends List")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+            PreferencesSummaryView(preferences: userPreferences)
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
             
-            ForEach(manualMembers) { member in
-                HStack {
-                    Image(systemName: "person.circle.fill")
-                        .foregroundColor(.green)
-                    Text(member.name)
-                    Spacer()
-                    Text("Added Manually")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            ForEach($selectedFriends) { $friend in
+                FriendPreferencesCard(friend: $friend)
             }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct UserPreferencesSummary: View {
-    let preferences: UserPreferences
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your Preferences")
-                .font(.title3)
-                .fontWeight(.bold)
-            
-            PreferencesSummaryView(preferences: preferences)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct ManualMembersSummary: View {
-    @Binding var manualMembers: [ManualMember]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Manual Members Details")
-                .font(.title3)
-                .fontWeight(.bold)
             
             ForEach($manualMembers) { $member in
-                ManualMemberDetailView(member: $member)
+                ManualMemberPreferencesCard(member: $member)
             }
+        }
+    }
+}
+
+struct FriendPreferencesCard: View {
+    @Binding var friend: Friend
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(friend.name)'s Preferences")
+                .font(.headline)
+            
+            PreferencesSummaryView(preferences: friend.preferences)
         }
         .padding()
         .background(Color(.systemBackground))
@@ -612,81 +572,30 @@ struct ManualMembersSummary: View {
     }
 }
 
-struct ManualMemberDetailView: View {
+struct ManualMemberPreferencesCard: View {
     @Binding var member: ManualMember
+    @State private var showingPreferencesEntry = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(member.name)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(member.name)'s Preferences")
                 .font(.headline)
             
-            PreferencesSection(title: "Available Times") {
-                if member.availability.isEmpty {
-                    Text("No times set")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(DayOfWeek.allCases, id: \.self) { day in
-                        if let slots = member.availability[day], !slots.isEmpty {
-                            HStack {
-                                Text(day.shortName)
-                                    .font(.caption)
-                                    .frame(width: 30, alignment: .leading)
-                                ForEach(slots, id: \.self) { slot in
-                                    Text(formatTimeSlot(slot))
-                                        .font(.caption)
-                                        .padding(4)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(4)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            PreferencesSection(title: "Preferred Days") {
-                if member.preferredDays.isEmpty {
-                    Text("No preferred days set")
-                        .foregroundColor(.secondary)
-                } else {
-                    FlowLayout(spacing: 8) {
-                        ForEach(Array(member.preferredDays), id: \.self) { day in
-                            Text(day.shortName)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-            }
-            
-            PreferencesSection(title: "Favorite Cuisines") {
-                if member.favoriteCuisines.isEmpty {
-                    Text("No favorite cuisines set")
-                        .foregroundColor(.secondary)
-                } else {
-                    FlowLayout(spacing: 8) {
-                        ForEach(Array(member.favoriteCuisines), id: \.self) { cuisine in
-                            HStack {
-                                Text(cuisine.emoji)
-                                Text(cuisine.rawValue)
-                            }
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(8)
-                        }
-                    }
-                }
+            if member.isComplete {
+                PreferencesSummaryView(preferences: UserPreferences(
+                    availability: member.availability,
+                    preferredDays: member.preferredDays,
+                    favoriteCuisines: member.favoriteCuisines
+                ))
+            } else {
+                Text("Preferences not set")
+                    .foregroundColor(.secondary)
             }
             
             Button(action: {
-                // Show edit view for this manual member
+                showingPreferencesEntry = true
             }) {
-                Text("Edit Details")
+                Text(member.isComplete ? "Edit Preferences" : "Set Preferences")
                     .font(.footnote)
                     .fontWeight(.medium)
             }
@@ -696,12 +605,9 @@ struct ManualMemberDetailView: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
-    
-    private func formatTimeSlot(_ slot: ClosedRange<Date>) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return "\(formatter.string(from: slot.lowerBound)) - \(formatter.string(from: slot.upperBound))"
+        .sheet(isPresented: $showingPreferencesEntry) {
+            ManualMemberPreferencesView(member: $member)
+        }
     }
 }
 
@@ -856,7 +762,7 @@ struct EnhancedManualMemberEntryView: View {
                                     currentMember = member
                                     showingPreferencesEntry = true
                                 }) {
-                                    Text("Edit Preferences")
+                                    Text(member.isComplete ? "Edit Preferences" : "Set Preferences")
                                         .font(.footnote)
                                 }
                                 .buttonStyle(SecondaryButtonStyle())
@@ -952,104 +858,123 @@ struct ManualMemberPreferencesView: View {
     }
     
     private func bindingForCuisine(cuisine: CuisineType) -> Binding<Bool> {
-        Binding(
-            get: { member.favoriteCuisines.contains(cuisine) },
-            set: { isOn in
-                if isOn {
-                    member.favoriteCuisines.insert(cuisine)
-                } else {
-                    member.favoriteCuisines.remove(cuisine)
+            Binding(
+                get: { member.favoriteCuisines.contains(cuisine) },
+                set: { isOn in
+                    if isOn {
+                        member.favoriteCuisines.insert(cuisine)
+                    } else {
+                        member.favoriteCuisines.remove(cuisine)
+                    }
                 }
-            }
-        )
+            )
+        }
     }
-}
 
-struct RestaurantsFoundView: View {
-    @Environment(\.presentationMode) var presentationMode
-    
-    let restaurants = [
-        Restaurant(name: "La Bella Italia", cuisine: "Italian", rating: 4.5, price: "$$"),
-        Restaurant(name: "Sushi Haven", cuisine: "Japanese", rating: 4.8, price: "$$$"),
-        Restaurant(name: "Taco Fiesta", cuisine: "Mexican", rating: 4.2, price: "$"),
-        Restaurant(name: "Le Petit Bistro", cuisine: "French", rating: 4.6, price: "$$$"),
-        Restaurant(name: "Spice Garden", cuisine: "Indian", rating: 4.4, price: "$$"),
-    ]
-    
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(restaurants) { restaurant in
-                    RestaurantRow(restaurant: restaurant)
+    struct RestaurantsFoundView: View {
+        @Environment(\.presentationMode) var presentationMode
+        
+        let restaurants = [
+            Restaurant(name: "La Bella Italia", cuisine: "Italian", rating: 4.5, price: "$$"),
+            Restaurant(name: "Sushi Haven", cuisine: "Japanese", rating: 4.8, price: "$$$"),
+            Restaurant(name: "Taco Fiesta", cuisine: "Mexican", rating: 4.2, price: "$"),
+            Restaurant(name: "Le Petit Bistro", cuisine: "French", rating: 4.6, price: "$$$"),
+            Restaurant(name: "Spice Garden", cuisine: "Indian", rating: 4.4, price: "$$"),
+        ]
+        
+        var body: some View {
+            NavigationView {
+                List {
+                    ForEach(restaurants) { restaurant in
+                        RestaurantRow(restaurant: restaurant)
+                    }
+                }
+                .navigationBarTitle("Restaurants Found", displayMode: .inline)
+                .navigationBarItems(trailing: Button("Done") {
+                    presentationMode.wrappedValue.dismiss()
+                })
+            }
+        }
+    }
+
+    struct RestaurantRow: View {
+        let restaurant: Restaurant
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(restaurant.name)
+                    .font(.headline)
+                HStack {
+                    Text(restaurant.cuisine)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(restaurant.price)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    ForEach(0..<5) { index in
+                        Image(systemName: index < Int(restaurant.rating) ? "star.fill" : "star")
+                            .foregroundColor(.yellow)
+                    }
+                    Text(String(format: "%.1f", restaurant.rating))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
             }
-            .navigationBarTitle("Restaurants Found", displayMode: .inline)
-            .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
+            .padding(.vertical, 8)
+        }
+    }
+
+    struct ManualMember: Identifiable {
+        let id = UUID()
+        var name: String
+        var email: String
+        var availability: [DayOfWeek: [ClosedRange<Date>]] = [:]
+        var preferredDays: Set<DayOfWeek> = []
+        var favoriteCuisines: Set<CuisineType> = []
+        
+        var isComplete: Bool {
+            !availability.isEmpty && !preferredDays.isEmpty && !favoriteCuisines.isEmpty
+        }
+    }
+
+    struct UserPreferences {
+        var availability: [DayOfWeek: [ClosedRange<Date>]] = [:]
+        var preferredDays: Set<DayOfWeek> = []
+        var favoriteCuisines: Set<CuisineType> = []
+    }
+
+    struct Restaurant: Identifiable {
+        let id = UUID()
+        let name: String
+        let cuisine: String
+        let rating: Double
+        let price: String
+    }
+
+    extension Friend {
+        var preferences: UserPreferences {
+            // Generate random preferences for friends
+            let availability: [DayOfWeek: [ClosedRange<Date>]] = Dictionary(uniqueKeysWithValues: DayOfWeek.allCases.map { day in
+                let slots = (0...Int.random(in: 1...3)).map { _ in
+                    let start = Calendar.current.date(bySettingHour: Int.random(in: 8...20), minute: 0, second: 0, of: Date())!
+                    let end = Calendar.current.date(byAdding: .hour, value: Int.random(in: 1...4), to: start)!
+                    return start...end
+                }
+                return (day, slots)
             })
+            
+            let preferredDays = Set(DayOfWeek.allCases.shuffled().prefix(Int.random(in: 2...5)))
+            let favoriteCuisines = Set(CuisineType.allCases.shuffled().prefix(Int.random(in: 2...5)))
+            
+            return UserPreferences(availability: availability, preferredDays: preferredDays, favoriteCuisines: favoriteCuisines)
         }
     }
-}
 
-struct RestaurantRow: View {
-    let restaurant: Restaurant
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(restaurant.name)
-                .font(.headline)
-            HStack {
-                Text(restaurant.cuisine)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text(restaurant.price)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            HStack {
-                ForEach(0..<5) { index in
-                    Image(systemName: index < Int(restaurant.rating) ? "star.fill" : "star")
-                        .foregroundColor(.yellow)
-                }
-                Text(String(format: "%.1f", restaurant.rating))
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
+    struct AddEventView_Previews: PreviewProvider {
+        static var previews: some View {
+            AddEventView()
         }
-        .padding(.vertical, 8)
     }
-}
-
-struct ManualMember: Identifiable {
-    let id = UUID()
-    var name: String
-    var email: String
-    var availability: [DayOfWeek: [ClosedRange<Date>]] = [:]
-    var preferredDays: Set<DayOfWeek> = []
-    var favoriteCuisines: Set<CuisineType> = []
-    
-    var isComplete: Bool {
-        !availability.isEmpty && !preferredDays.isEmpty && !favoriteCuisines.isEmpty
-    }
-}
-
-struct UserPreferences {
-    var availability: [DayOfWeek: [ClosedRange<Date>]] = [:]
-    var preferredDays: Set<DayOfWeek> = []
-    var favoriteCuisines: Set<CuisineType> = []
-}
-
-struct Restaurant: Identifiable {
-    let id = UUID()
-    let name: String
-    let cuisine: String
-    let rating: Double
-    let price: String
-}
-
-struct AddEventView_Previews: PreviewProvider {
-    static var previews: some View {
-        AddEventView()
-    }
-}
