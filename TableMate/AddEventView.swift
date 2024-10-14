@@ -9,6 +9,7 @@ struct AddEventView: View {
     @State private var showingSummary = false
     @State private var userPreferences: UserPreferences
     @State private var showingRestaurants = false
+    @State private var generatedReport: (bestMeetingTimes: [DayOfWeek: [ClosedRange<Date>]], topCuisines: [CuisineType])?
     
     let steps = ["Group Size", "Add Members", "Preferences", "Summary"]
     
@@ -37,7 +38,7 @@ struct AddEventView: View {
                         case 2:
                             PreferencesView(userPreferences: $userPreferences)
                         case 3:
-                            EnhancedSummaryView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences)
+                            EnhancedSummaryView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences, generatedReport: $generatedReport)
                         default:
                             EmptyView()
                         }
@@ -53,7 +54,9 @@ struct AddEventView: View {
             })
             .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all))
             .sheet(isPresented: $showingRestaurants) {
-                RestaurantsFoundView()
+                if let report = generatedReport {
+                    RestaurantsFoundView(topCuisines: report.topCuisines)
+                }
             }
         }
     }
@@ -76,17 +79,6 @@ struct AddEventView: View {
                         .fontWeight(.medium)
                 }
                 .buttonStyle(PrimaryButtonStyle())
-            } else {
-                Button(action: {
-                    if manualMembers.allSatisfy({ $0.isComplete }) {
-                        showingRestaurants = true
-                    }
-                }) {
-                    Text("Find Restaurants")
-                        .fontWeight(.medium)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!manualMembers.allSatisfy({ $0.isComplete }))
             }
         }
         .padding()
@@ -516,6 +508,8 @@ struct EnhancedSummaryView: View {
     @Binding var selectedFriends: [Friend]
     @Binding var manualMembers: [ManualMember]
     let userPreferences: UserPreferences
+    @State private var reportGenerated = false
+    @Binding var generatedReport: (bestMeetingTimes: [DayOfWeek: [ClosedRange<Date>]], topCuisines: [CuisineType])?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -523,7 +517,214 @@ struct EnhancedSummaryView: View {
                 .font(.headline)
             
             GroupMembersSummary(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences)
+            
+            if let report = generatedReport {
+                MeetingTimesView(bestMeetingTimes: report.bestMeetingTimes)
+                TopCuisinesView(topCuisines: report.topCuisines)
+            }
+            
+            Button(action: {
+                if generatedReport == nil {
+                    generateReport()
+                } else {
+                    // Proceed to find restaurants
+                }
+            }) {
+                Text(generatedReport != nil ? "Find Restaurants" : "Generate Report")
+                    .fontWeight(.medium)
+            }
+            .buttonStyle(PrimaryButtonStyle())
         }
+    }
+    
+    private func generateReport() {
+        let allPreferences = [userPreferences] + selectedFriends.map(\.preferences) + manualMembers.map { UserPreferences(availability: $0.availability, preferredDays: $0.preferredDays, favoriteCuisines: $0.favoriteCuisines) }
+        
+        print("All preferences:")
+        for (index, pref) in allPreferences.enumerated() {
+            print("Person \(index + 1):")
+            print("  Availability: \(pref.availability.mapValues { formatTimeSlots($0) })")
+            print("  Preferred Days: \(pref.preferredDays)")
+            print("  Favorite Cuisines: \(pref.favoriteCuisines)")
+        }
+        
+        let bestMeetingTimes = findBestMeetingTimes(preferences: allPreferences)
+        let topCuisines = findTopCuisines(preferences: allPreferences)
+        
+        generatedReport = (bestMeetingTimes, topCuisines)
+    }
+
+    
+    private func findBestMeetingTimes(preferences: [UserPreferences]) -> [DayOfWeek: [ClosedRange<Date>]] {
+        print("Starting findBestMeetingTimes with \(preferences.count) preferences")
+        
+        var bestTimes: [DayOfWeek: [ClosedRange<Date>]] = [:]
+        
+        for day in DayOfWeek.allCases {
+            print("Checking day: \(day)")
+            let availableTimes = preferences.compactMap { $0.availability[day] }
+            print("Available times for \(day): \(availableTimes.count) out of \(preferences.count)")
+            
+            if availableTimes.count == preferences.count {
+                print("All participants have availability for \(day)")
+                print("User 1 slots: \(formatTimeSlots(availableTimes[0]))")
+                print("User 2 slots: \(formatTimeSlots(availableTimes[1]))")
+                
+                let commonTimes = intersectTimeSlots(availableTimes[0], availableTimes[1])
+                print("Common times found for \(day): \(formatTimeSlots(commonTimes))")
+                
+                if !commonTimes.isEmpty {
+                    bestTimes[day] = commonTimes
+                }
+            } else {
+                print("Not all participants are available on \(day)")
+            }
+            
+            if bestTimes.count == 3 {
+                break
+            }
+        }
+        
+        print("Best times found: \(bestTimes.mapValues { formatTimeSlots($0) })")
+        return bestTimes
+    }
+
+    private func intersectTimeSlots(_ slots1: [ClosedRange<Date>], _ slots2: [ClosedRange<Date>]) -> [ClosedRange<Date>] {
+        print("Intersecting: \(formatTimeSlots(slots1)) with \(formatTimeSlots(slots2))")
+        var result: [ClosedRange<Date>] = []
+        
+        for slot1 in slots1 {
+            for slot2 in slots2 {
+                let start = max(slot1.lowerBound, slot2.lowerBound)
+                let end = min(slot1.upperBound, slot2.upperBound)
+                
+                if start < end {
+                    result.append(start...end)
+                    print("Found intersection: \(formatTimeSlot(start...end))")
+                }
+            }
+        }
+        
+        // Merge overlapping time slots
+        result = mergeOverlappingSlots(result)
+        
+        print("Intersection result: \(formatTimeSlots(result))")
+        return result
+    }
+
+    private func mergeOverlappingSlots(_ slots: [ClosedRange<Date>]) -> [ClosedRange<Date>] {
+        guard !slots.isEmpty else { return [] }
+        
+        let sortedSlots = slots.sorted { $0.lowerBound < $1.lowerBound }
+        var mergedSlots: [ClosedRange<Date>] = [sortedSlots[0]]
+        
+        for slot in sortedSlots.dropFirst() {
+            guard let lastSlot = mergedSlots.last else { continue }
+            
+            if slot.lowerBound <= lastSlot.upperBound {
+                if slot.upperBound > lastSlot.upperBound {
+                    mergedSlots[mergedSlots.count - 1] = lastSlot.lowerBound...slot.upperBound
+                }
+            } else {
+                mergedSlots.append(slot)
+            }
+        }
+        
+        return mergedSlots
+    }
+
+    private func formatTimeSlots(_ slots: [ClosedRange<Date>]) -> String {
+        return slots.map { formatTimeSlot($0) }.joined(separator: ", ")
+    }
+
+    private func formatTimeSlot(_ slot: ClosedRange<Date>) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return "\(formatter.string(from: slot.lowerBound)) - \(formatter.string(from: slot.upperBound))"
+    }
+    
+    private func findTopCuisines(preferences: [UserPreferences]) -> [CuisineType] {
+        let allCuisines = preferences.flatMap { $0.favoriteCuisines }
+        let cuisineCounts = Dictionary(allCuisines.map { ($0, 1) }, uniquingKeysWith: +)
+        return cuisineCounts.sorted { $0.value > $1.value }.prefix(3).map { $0.key }
+    }
+}
+
+struct MeetingTimesView: View {
+    let bestMeetingTimes: [DayOfWeek: [ClosedRange<Date>]]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Best Meeting Times")
+                .font(.headline)
+            
+            if bestMeetingTimes.isEmpty {
+                Text("No common available times found for any day.")
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(bestMeetingTimes.keys.sorted(), id: \.self) { day in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(day.fullName)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        ForEach(bestMeetingTimes[day]!, id: \.self) { timeSlot in
+                            Text(formatTimeSlot(timeSlot))
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+    
+    private func formatTimeSlot(_ slot: ClosedRange<Date>) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return "\(formatter.string(from: slot.lowerBound)) - \(formatter.string(from: slot.upperBound))"
+    }
+}
+
+struct TopCuisinesView: View {
+    let topCuisines: [CuisineType]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Top Cuisines")
+                .font(.headline)
+            
+            if topCuisines.isEmpty {
+                Text("No common favorite cuisines found. Why not try something new?")
+                    .foregroundColor(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(topCuisines, id: \.self) { cuisine in
+                        HStack {
+                            Text(cuisine.emoji)
+                            Text(cuisine.rawValue)
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(15)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 
@@ -873,6 +1074,7 @@ struct ManualMemberPreferencesView: View {
 
     struct RestaurantsFoundView: View {
         @Environment(\.presentationMode) var presentationMode
+        let topCuisines: [CuisineType]
         
         let restaurants = [
             Restaurant(name: "La Bella Italia", cuisine: "Italian", rating: 4.5, price: "$$"),
@@ -885,8 +1087,20 @@ struct ManualMemberPreferencesView: View {
         var body: some View {
             NavigationView {
                 List {
-                    ForEach(restaurants) { restaurant in
-                        RestaurantRow(restaurant: restaurant)
+                    Section(header: Text("Recommended Based on Top Cuisines")) {
+                        ForEach(restaurants.filter { restaurant in
+                            topCuisines.contains { $0.rawValue == restaurant.cuisine }
+                        }) { restaurant in
+                            RestaurantRow(restaurant: restaurant)
+                        }
+                    }
+                    
+                    Section(header: Text("Other Options")) {
+                        ForEach(restaurants.filter { restaurant in
+                            !topCuisines.contains { $0.rawValue == restaurant.cuisine }
+                        }) { restaurant in
+                            RestaurantRow(restaurant: restaurant)
+                        }
                     }
                 }
                 .navigationBarTitle("Restaurants Found", displayMode: .inline)
@@ -978,3 +1192,29 @@ struct ManualMemberPreferencesView: View {
             AddEventView()
         }
     }
+
+extension View {
+    func assignToVariable<T>(_ variable: Binding<T?>) -> some View where T: AnyObject {
+        self.modifier(AssignToVariableModifier(variable: variable))
+    }
+}
+
+struct AssignToVariableModifier<T: AnyObject>: ViewModifier {
+    @Binding var variable: T?
+    
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                if let typedContent = content as? T {
+                    variable = typedContent
+                }
+            }
+    }
+}
+
+extension DayOfWeek: Comparable {
+    static func < (lhs: DayOfWeek, rhs: DayOfWeek) -> Bool {
+        let order: [DayOfWeek] = [.monday, .tuesday, .wednesday, .thursday, .friday, .saturday, .sunday]
+        return order.firstIndex(of: lhs)! < order.firstIndex(of: rhs)!
+    }
+}
