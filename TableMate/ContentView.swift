@@ -18,11 +18,6 @@ struct ContentView: View {
                     Label("Add", systemImage: "plus.circle")
                 }
             
-            BookingsView()
-                .tabItem {
-                    Label("Bookings", systemImage: "calendar")
-                }
-            
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person")
