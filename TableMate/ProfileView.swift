@@ -3,7 +3,6 @@ import SwiftUI
 struct ProfileView: View {
     @State private var user = User.sampleUser
     @State private var isEditingAvailability = false
-    @State private var isEditingPreferences = false
     
     var body: some View {
         ScrollView {
@@ -20,9 +19,6 @@ struct ProfileView: View {
         .navigationBarTitle("Profile", displayMode: .inline)
         .sheet(isPresented: $isEditingAvailability) {
             AvailabilityEditView(availability: $user.availability)
-        }
-        .sheet(isPresented: $isEditingPreferences) {
-            PreferencesEditView(user: $user)
         }
     }
     
@@ -51,9 +47,18 @@ struct ProfileView: View {
     
     private var availabilitySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "My Availability", action: { isEditingAvailability = true })
+            HStack {
+                Text("My Availability")
+                    .font(.headline)
+                Spacer()
+                Button("See All") {
+                    isEditingAvailability = true
+                }
+                .font(.subheadline)
+                .foregroundColor(.blue)
+            }
             
-            ForEach(DayOfWeek.allCases, id: \.self) { day in
+            ForEach(DayOfWeek.allCases.prefix(3), id: \.self) { day in
                 if let timeSlots = user.availability[day], !timeSlots.isEmpty {
                     HStack {
                         Text(day.fullName)
@@ -79,11 +84,20 @@ struct ProfileView: View {
     
     private var preferredDaysSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Preferred Days", action: { isEditingPreferences = true })
+            Text("Preferred Days")
+                .font(.headline)
             
             FlowLayout(spacing: 8) {
                 ForEach(DayOfWeek.allCases, id: \.self) { day in
-                    DayPill(day: day, isSelected: user.preferredDays.contains(day))
+                    Button(action: {
+                        if user.preferredDays.contains(day) {
+                            user.preferredDays.remove(day)
+                        } else {
+                            user.preferredDays.insert(day)
+                        }
+                    }) {
+                        DayPill(day: day, isSelected: user.preferredDays.contains(day))
+                    }
                 }
             }
         }
@@ -95,11 +109,20 @@ struct ProfileView: View {
     
     private var favoriteCuisinesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Favorite Cuisines", action: { isEditingPreferences = true })
+            Text("Favorite Cuisines")
+                .font(.headline)
             
             FlowLayout(spacing: 8) {
                 ForEach(CuisineType.allCases, id: \.self) { cuisine in
-                    CuisinePill(cuisine: cuisine, isSelected: user.favoriteCuisines.contains(cuisine))
+                    Button(action: {
+                        if user.favoriteCuisines.contains(cuisine) {
+                            user.favoriteCuisines.remove(cuisine)
+                        } else {
+                            user.favoriteCuisines.insert(cuisine)
+                        }
+                    }) {
+                        CuisinePill(cuisine: cuisine, isSelected: user.favoriteCuisines.contains(cuisine))
+                    }
                 }
             }
         }
@@ -111,7 +134,8 @@ struct ProfileView: View {
     
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Preferences", action: { isEditingPreferences = true })
+            Text("Preferences")
+                .font(.headline)
             
             Toggle("Open to meeting new people", isOn: $user.isOpenToMeetingNewPeople)
                 .font(.system(size: 16, design: .rounded))
@@ -123,16 +147,14 @@ struct ProfileView: View {
                 Text("Preferred group size:")
                     .font(.system(size: 16, design: .rounded))
                 Spacer()
-                Text("\(user.preferredGroupSize) people")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                StepperView(value: $user.preferredGroupSize, range: 2...10)
             }
             
             HStack {
                 Text("Max travel distance:")
                     .font(.system(size: 16, design: .rounded))
                 Spacer()
-                Text("\(user.maxTravelDistance) miles")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                StepperView(value: $user.maxTravelDistance, range: 1...50, unit: "miles")
             }
         }
         .padding()
@@ -192,6 +214,36 @@ struct CuisinePill: View {
         .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
         .foregroundColor(isSelected ? .white : .primary)
         .cornerRadius(15)
+    }
+}
+
+struct StepperView: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var unit: String = ""
+    
+    var body: some View {
+        HStack {
+            Button(action: { if value > range.lowerBound { value -= 1 } }) {
+                Image(systemName: "minus")
+                    .padding(8)
+                    .background(Color.blue.opacity(0.1))
+                    .foregroundColor(.blue)
+                    .cornerRadius(8)
+            }
+            
+            Text("\(value)\(unit.isEmpty ? "" : " \(unit)")")
+                .frame(minWidth: 40)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+            
+            Button(action: { if value < range.upperBound { value += 1 } }) {
+                Image(systemName: "plus")
+                    .padding(8)
+                    .background(Color.blue.opacity(0.1))
+                    .foregroundColor(.blue)
+                    .cornerRadius(8)
+            }
+        }
     }
 }
 
@@ -307,64 +359,6 @@ struct TimeSlotEditor: View {
     }
 }
 
-struct PreferencesEditView: View {
-    @Binding var user: User
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Preferred Days")) {
-                    ForEach(DayOfWeek.allCases, id: \.self) { day in
-                        Toggle(day.fullName, isOn: Binding(
-                            get: { user.preferredDays.contains(day) },
-                            set: { newValue in
-                                if newValue {
-                                    user.preferredDays.insert(day)
-                                } else {
-                                    user.preferredDays.remove(day)
-                                }
-                            }
-                        ))
-                    }
-                }
-                
-                Section(header: Text("Favorite Cuisines")) {
-                    ForEach(CuisineType.allCases, id: \.self) { cuisine in
-                        Toggle(cuisine.rawValue, isOn: Binding(
-                            get: { user.favoriteCuisines.contains(cuisine) },
-                            set: { newValue in
-                                if newValue {
-                                    user.favoriteCuisines.insert(cuisine)
-                                } else {
-                                    user.favoriteCuisines.remove(cuisine)
-                                }
-                            }
-                        ))
-                    }
-                }
-                
-                Section(header: Text("Other Preferences")) {
-                    Toggle("Open to meeting new people", isOn: $user.isOpenToMeetingNewPeople)
-                    Toggle("Notify me about new events", isOn: $user.notifyAboutNewEvents)
-                    
-                    Stepper(value: $user.preferredGroupSize, in: 2...10) {
-                        Text("Preferred group size: \(user.preferredGroupSize)")
-                    }
-                    
-                    Stepper(value: $user.maxTravelDistance, in: 1...50) {
-                        Text("Max travel distance: \(user.maxTravelDistance) miles")
-                    }
-                }
-            }
-            .navigationBarTitle("Edit Preferences", displayMode: .inline)
-            .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
-            })
-        }
-    }
-}
-
 enum DayOfWeek: String, CaseIterable {
     case monday, tuesday, wednesday, thursday, friday, saturday, sunday
     
@@ -398,7 +392,7 @@ enum CuisineType: String, CaseIterable {
         case .chinese: return "🥡"
         case .french: return "🥐"
         case .american: return "🍔"
-        case .mediterranean: return "🥙"
+       case .mediterranean: return "🥙"
         case .thai: return "🍜"
         case .vietnamese: return "🍲"
         }
