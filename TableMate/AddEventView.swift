@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct AddEventView: View {
     @Environment(\.presentationMode) var presentationMode
@@ -10,6 +11,7 @@ struct AddEventView: View {
     @State private var userPreferences: UserPreferences
     @State private var showingRestaurants = false
     @State private var generatedReport: (bestMeetingTimes: [DayOfWeek: [ClosedRange<Date>]], topCuisines: [CuisineType])?
+    @State private var restaurants: [YelpRestaurant] = []
     
     let steps = ["Group Size", "Add Members", "Preferences", "Summary"]
     
@@ -23,43 +25,47 @@ struct AddEventView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                StepProgressView(currentStep: $currentStep, steps: steps)
-                    .padding(.top)
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        switch currentStep {
-                        case 0:
-                            GroupSizeSelectionView(groupSize: $groupSize)
-                        case 1:
-                            AddMembersView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, groupSize: groupSize)
-                        case 2:
-                            PreferencesView(userPreferences: $userPreferences)
-                        case 3:
-                            EnhancedSummaryView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, userPreferences: userPreferences, generatedReport: $generatedReport)
-                        default:
-                            EmptyView()
+            NavigationView {
+                VStack(spacing: 0) {
+                    StepProgressView(currentStep: $currentStep, steps: steps)
+                        .padding(.top)
+                    
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            switch currentStep {
+                            case 0:
+                                GroupSizeSelectionView(groupSize: $groupSize)
+                            case 1:
+                                AddMembersView(selectedFriends: $selectedFriends, manualMembers: $manualMembers, groupSize: groupSize)
+                            case 2:
+                                PreferencesView(userPreferences: $userPreferences)
+                            case 3:
+                                EnhancedSummaryView(
+                                    selectedFriends: $selectedFriends,
+                                    manualMembers: $manualMembers,
+                                    userPreferences: userPreferences,
+                                    generatedReport: $generatedReport,
+                                    onFindRestaurants: fetchRestaurants
+                                )
+                            default:
+                                EmptyView()
+                            }
                         }
+                        .padding()
                     }
-                    .padding()
+                    
+                    navigationButtons
                 }
-                
-                navigationButtons
-            }
-            .navigationBarTitle("Create Event", displayMode: .inline)
-            .navigationBarItems(leading: Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
-            })
-            .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all))
-            .sheet(isPresented: $showingRestaurants) {
-                if let report = generatedReport {
-                    RestaurantsFoundView(topCuisines: report.topCuisines)
+                .navigationBarTitle("Create Event", displayMode: .inline)
+                .navigationBarItems(leading: Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                })
+                .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all))
+                .sheet(isPresented: $showingRestaurants) {
+                    RestaurantsFoundView(restaurants: restaurants)
                 }
             }
         }
-    }
     
     private var navigationButtons: some View {
         HStack {
@@ -83,6 +89,95 @@ struct AddEventView: View {
         }
         .padding()
         .background(Color(.systemBackground))
+    }
+    
+    private func fetchRestaurants() {
+        guard let report = generatedReport else {
+            print("Error: No generated report available")
+            return
+        }
+        
+        let cuisines = report.topCuisines.map { $0.rawValue }.joined(separator: ",")
+        let openTime = getUnixTimestamp(from: report.bestMeetingTimes.values.first?.first?.lowerBound)
+        
+        let urlString = "https://api.yelp.com/v3/businesses/search?term=\(cuisines)&latitude=37.786882&longitude=-122.399972&open_at=\(openTime)"
+        
+        guard let encodedUrlString = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: encodedUrlString) else {
+            print("Error: Invalid URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer wsEhqlOsTtVjUW2ltj5j80fWMDG0jPMFf_X48NolfsDstqwmhBJitSAzFTFO1id0M2e5xaJVrlHHRDcg1nZUjVgyLQp5-KIpFlHXYNOVmXRXbCBA4wP9hG2cMj4MZ3Yx", forHTTPHeaderField: "Authorization")
+        
+        print("Sending request to URL: \(url.absoluteString)")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Network error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("Error: Not a valid HTTP response")
+                return
+            }
+            
+            print("HTTP Status Code: \(httpResponse.statusCode)")
+            
+            guard let data = data else {
+                print("Error: No data received")
+                return
+            }
+            
+            do {
+                let decodedResponse = try JSONDecoder().decode(YelpResponse.self, from: data)
+                DispatchQueue.main.async {
+                    self.restaurants = decodedResponse.businesses
+                    self.showingRestaurants = true
+                }
+            } catch {
+                print("Decoding error: \(error)")
+                if let rawResponse = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(rawResponse)")
+                }
+            }
+        }.resume()
+    }
+
+    private func getUnixTimestamp(from date: Date?) -> Int {
+        guard let date = date else {
+            return Int(Date().timeIntervalSince1970)
+        }
+        return Int(date.timeIntervalSince1970)
+    }
+    
+    private func formatTimeForYelp(_ date: Date?) -> String {
+            guard let date = date else { return "" }
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return formatter.string(from: date)
+        }
+}
+
+struct YelpResponse: Codable {
+    let businesses: [YelpRestaurant]
+}
+
+struct YelpRestaurant: Codable, Identifiable {
+    let id: String
+    let name: String
+    let image_url: String
+    let url: String
+    let price: String?
+    let location: YelpLocation
+    
+    struct YelpLocation: Codable {
+        let address1: String
+        let city: String
+        let state: String
+        let zip_code: String
     }
 }
 
@@ -508,8 +603,8 @@ struct EnhancedSummaryView: View {
     @Binding var selectedFriends: [Friend]
     @Binding var manualMembers: [ManualMember]
     let userPreferences: UserPreferences
-    @State private var reportGenerated = false
     @Binding var generatedReport: (bestMeetingTimes: [DayOfWeek: [ClosedRange<Date>]], topCuisines: [CuisineType])?
+    let onFindRestaurants: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -521,32 +616,24 @@ struct EnhancedSummaryView: View {
             if let report = generatedReport {
                 MeetingTimesView(bestMeetingTimes: report.bestMeetingTimes)
                 TopCuisinesView(topCuisines: report.topCuisines)
-            }
-            
-            Button(action: {
-                if generatedReport == nil {
-                    generateReport()
-                } else {
-                    // Proceed to find restaurants
+                
+                Button(action: onFindRestaurants) {
+                    Text("Find Restaurants")
+                        .fontWeight(.medium)
                 }
-            }) {
-                Text(generatedReport != nil ? "Find Restaurants" : "Generate Report")
-                    .fontWeight(.medium)
+                .buttonStyle(PrimaryButtonStyle())
+            } else {
+                Button(action: generateReport) {
+                    Text("Generate Report")
+                        .fontWeight(.medium)
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
-            .buttonStyle(PrimaryButtonStyle())
         }
     }
     
     private func generateReport() {
         let allPreferences = [userPreferences] + selectedFriends.map(\.preferences) + manualMembers.map { UserPreferences(availability: $0.availability, preferredDays: $0.preferredDays, favoriteCuisines: $0.favoriteCuisines) }
-        
-        print("All preferences:")
-        for (index, pref) in allPreferences.enumerated() {
-            print("Person \(index + 1):")
-            print("  Availability: \(pref.availability.mapValues { formatTimeSlots($0) })")
-            print("  Preferred Days: \(pref.preferredDays)")
-            print("  Favorite Cuisines: \(pref.favoriteCuisines)")
-        }
         
         let bestMeetingTimes = findBestMeetingTimes(preferences: allPreferences)
         let topCuisines = findTopCuisines(preferences: allPreferences)
@@ -1073,71 +1160,50 @@ struct ManualMemberPreferencesView: View {
     }
 
     struct RestaurantsFoundView: View {
-        @Environment(\.presentationMode) var presentationMode
-        let topCuisines: [CuisineType]
-        
-        let restaurants = [
-            Restaurant(name: "La Bella Italia", cuisine: "Italian", rating: 4.5, price: "$$"),
-            Restaurant(name: "Sushi Haven", cuisine: "Japanese", rating: 4.8, price: "$$$"),
-            Restaurant(name: "Taco Fiesta", cuisine: "Mexican", rating: 4.2, price: "$"),
-            Restaurant(name: "Le Petit Bistro", cuisine: "French", rating: 4.6, price: "$$$"),
-            Restaurant(name: "Spice Garden", cuisine: "Indian", rating: 4.4, price: "$$"),
-        ]
+        let restaurants: [YelpRestaurant]
         
         var body: some View {
             NavigationView {
-                List {
-                    Section(header: Text("Recommended Based on Top Cuisines")) {
-                        ForEach(restaurants.filter { restaurant in
-                            topCuisines.contains { $0.rawValue == restaurant.cuisine }
-                        }) { restaurant in
-                            RestaurantRow(restaurant: restaurant)
-                        }
-                    }
-                    
-                    Section(header: Text("Other Options")) {
-                        ForEach(restaurants.filter { restaurant in
-                            !topCuisines.contains { $0.rawValue == restaurant.cuisine }
-                        }) { restaurant in
-                            RestaurantRow(restaurant: restaurant)
-                        }
-                    }
+                List(restaurants) { restaurant in
+                    RestaurantRow(restaurant: restaurant)
                 }
                 .navigationBarTitle("Restaurants Found", displayMode: .inline)
-                .navigationBarItems(trailing: Button("Done") {
-                    presentationMode.wrappedValue.dismiss()
-                })
             }
         }
     }
 
     struct RestaurantRow: View {
-        let restaurant: Restaurant
+        let restaurant: YelpRestaurant
         
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
+                AsyncImage(url: URL(string: restaurant.image_url)) { image in
+                    image.resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 200)
+                        .clipped()
+                } placeholder: {
+                    ProgressView()
+                }
+                
                 Text(restaurant.name)
                     .font(.headline)
-                HStack {
-                    Text(restaurant.cuisine)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                    Text(restaurant.price)
+                
+                if let price = restaurant.price {
+                    Text(price)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                HStack {
-                    ForEach(0..<5) { index in
-                        Image(systemName: index < Int(restaurant.rating) ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
-                    }
-                    Text(String(format: "%.1f", restaurant.rating))
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                
+                Text("\(restaurant.location.address1), \(restaurant.location.city), \(restaurant.location.state) \(restaurant.location.zip_code)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .onTapGesture {
+                if let url = URL(string: restaurant.url) {
+                    UIApplication.shared.open(url)
                 }
             }
-            .padding(.vertical, 8)
         }
     }
 
