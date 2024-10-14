@@ -2,37 +2,37 @@ import SwiftUI
 
 // MARK: - Models
 
-struct BusinessSearchResponse: Codable {
+struct TMBusinessSearchResponse: Codable {
     let total: Int
-    let businesses: [Business]
+    let businesses: [TMBusiness]
 }
 
-struct Business: Codable, Identifiable {
+struct TMBusiness: Codable, Identifiable {
     let id: String
     let name: String
     let image_url: String?
     let url: String
     let review_count: Int
-    let categories: [Category]
+    let categories: [TMCategory]
     let rating: Double
-    let coordinates: Coordinates
-    let location: Location
+    let coordinates: TMCoordinates
+    let location: TMLocation
     let price: String?
 }
 
-struct Category: Codable, Identifiable {
+struct TMCategory: Codable, Identifiable {
     let alias: String
     let title: String
     
     var id: String { alias }
 }
 
-struct Coordinates: Codable {
+struct TMCoordinates: Codable {
     let latitude: Double?
     let longitude: Double?
 }
 
-struct Location: Codable {
+struct TMLocation: Codable {
     let address1: String?
     let address2: String?
     let address3: String?
@@ -42,14 +42,13 @@ struct Location: Codable {
     let state: String?
 }
 
-// MARK: - ViewModel
+// MARK: - ViewModels
 
-class HomeViewModel: ObservableObject {
-    @Published var featuredRestaurants: [Business] = []
-    @Published var recommendedRestaurants: [Business] = []
+class TMHomeViewModel: ObservableObject {
+    @Published var featuredRestaurants: [TMBusiness] = []
+    @Published var recommendedRestaurants: [TMBusiness] = []
     
     private let apiKey = "wsEhqlOsTtVjUW2ltj5j80fWMDG0jPMFf_X48NolfsDstqwmhBJitSAzFTFO1id0M2e5xaJVrlHHRDcg1nZUjVgyLQp5-KIpFlHXYNOVmXRXbCBA4wP9hG2cMj4MZ3Yx"
-    
     private let baseURL = "https://api.yelp.com/v3/businesses/search"
     
     init() {
@@ -87,7 +86,7 @@ class HomeViewModel: ObservableObject {
                 }
                 
                 let decoder = JSONDecoder()
-                let searchResponse = try decoder.decode(BusinessSearchResponse.self, from: data)
+                let searchResponse = try decoder.decode(TMBusinessSearchResponse.self, from: data)
                 DispatchQueue.main.async {
                     self.featuredRestaurants = searchResponse.businesses
                 }
@@ -127,7 +126,7 @@ class HomeViewModel: ObservableObject {
                 }
                 
                 let decoder = JSONDecoder()
-                let searchResponse = try decoder.decode(BusinessSearchResponse.self, from: data)
+                let searchResponse = try decoder.decode(TMBusinessSearchResponse.self, from: data)
                 DispatchQueue.main.async {
                     self.recommendedRestaurants = searchResponse.businesses
                 }
@@ -138,15 +137,107 @@ class HomeViewModel: ObservableObject {
     }
 }
 
+class TMRestaurantSearchViewModel: ObservableObject {
+    @Published var restaurants: [TMBusiness] = []
+    @Published var searchText: String = ""
+    @Published var selectedCuisine: Cuisine? = nil
+    @Published var selectedSortOption: SortOption = .bestMatch
+    @Published var isLoading: Bool = false
+    
+    private let apiKey = "wsEhqlOsTtVjUW2ltj5j80fWMDG0jPMFf_X48NolfsDstqwmhBJitSAzFTFO1id0M2e5xaJVrlHHRDcg1nZUjVgyLQp5-KIpFlHXYNOVmXRXbCBA4wP9hG2cMj4MZ3Yx"
+    private let baseURL = "https://api.yelp.com/v3/businesses/search"
+    
+    enum SortOption: String, CaseIterable, Identifiable {
+        case bestMatch = "Best Match"
+        case rating = "Rating"
+        case reviewCount = "Review Count"
+        case distance = "Distance"
+        
+        var id: String { self.rawValue }
+        
+        var yelpValue: String {
+            switch self {
+            case .bestMatch: return "best_match"
+            case .rating: return "rating"
+            case .reviewCount: return "review_count"
+            case .distance: return "distance"
+            }
+        }
+    }
+    
+    init() {
+        // Initial fetch if needed
+    }
+    
+    func fetchRestaurants(latitude: Double, longitude: Double) {
+        isLoading = true
+        var components = URLComponents(string: baseURL)!
+        
+        var queryItems = [
+            URLQueryItem(name: "term", value: "restaurants"),
+            URLQueryItem(name: "latitude", value: "\(latitude)"),
+            URLQueryItem(name: "longitude", value: "\(longitude)"),
+            URLQueryItem(name: "limit", value: "50")
+        ]
+        
+        if !searchText.isEmpty {
+            queryItems.append(URLQueryItem(name: "term", value: searchText))
+        }
+        
+        if let cuisine = selectedCuisine {
+            queryItems.append(URLQueryItem(name: "categories", value: cuisine.rawValue.lowercased()))
+        }
+        
+        queryItems.append(URLQueryItem(name: "sort_by", value: selectedSortOption.yelpValue))
+        
+        components.queryItems = queryItems
+        
+        guard let url = components.url else {
+            isLoading = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        
+        Task {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    print("Error fetching restaurants: \(response)")
+                    DispatchQueue.main.async {
+                        self.isLoading = false
+                    }
+                    return
+                }
+                
+                let decoder = JSONDecoder()
+                let searchResponse = try decoder.decode(TMBusinessSearchResponse.self, from: data)
+                DispatchQueue.main.async {
+                    self.restaurants = searchResponse.businesses
+                    self.isLoading = false
+                }
+            } catch {
+                print("Error fetching restaurants: \(error)")
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
 // MARK: - HomeView
 
-struct HomeView: View {
+struct TMHomeView: View {
     @State private var searchText = ""
     @State private var selectedTab = 0
     @State private var showingProfileSheet = false
     @State private var showingNewEventSheet = false
+    @State private var navigateToSearch = false
+    @State private var selectedCuisineForSearch: Cuisine? = nil
     
-    @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var viewModel = TMHomeViewModel()
     
     var body: some View {
         NavigationView {
@@ -181,12 +272,19 @@ struct HomeView: View {
                     }
                 }
             }
+            .background(
+                NavigationLink(
+                    destination: TMRestaurantSearchView(selectedCuisine: selectedCuisineForSearch),
+                    isActive: $navigateToSearch,
+                    label: { EmptyView() }
+                )
+            )
         }
         .sheet(isPresented: $showingProfileSheet) {
-            ProfileView()
+            TMProfileView()
         }
         .sheet(isPresented: $showingNewEventSheet) {
-            NewEventView()
+            TMNewEventView()
         }
     }
     
@@ -208,13 +306,13 @@ struct HomeView: View {
     
     private var quickActionsBar: some View {
         HStack(spacing: 20) {
-            QuickActionButton(icon: "calendar.badge.plus", title: "New Event") {
+            TMQuickActionButton(icon: "calendar.badge.plus", title: "New Event") {
                 showingNewEventSheet = true
             }
-            QuickActionButton(icon: "fork.knife", title: "Find Restaurant") {
-                // Action to find restaurant
+            TMQuickActionButton(icon: "fork.knife", title: "Find Restaurant") {
+                navigateToSearch = true
             }
-            QuickActionButton(icon: "person.2.fill", title: "Invite Friends") {
+            TMQuickActionButton(icon: "person.2.fill", title: "Invite Friends") {
                 // Action to invite friends
             }
         }
@@ -223,24 +321,24 @@ struct HomeView: View {
     
     private var upcomingReservation: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Upcoming Reservation", action: {
+            TMSectionHeader(title: "Upcoming Reservation", action: {
                 // Action to view all reservations
             })
             
-            UpcomingReservationCard()
+            TMUpcomingReservationCard()
         }
     }
     
     private var featuredRestaurants: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Featured Restaurants", action: {
+            TMSectionHeader(title: "Featured Restaurants", action: {
                 // Action to view all featured restaurants
             })
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20) {
                     ForEach(viewModel.featuredRestaurants) { business in
-                        FeaturedRestaurantCard(business: business)
+                        TMFeaturedRestaurantCard(business: business)
                     }
                 }
                 .padding(.horizontal)
@@ -250,13 +348,13 @@ struct HomeView: View {
     
     private var friendsActivitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Friends' Activity", action: {
+            TMSectionHeader(title: "Friends' Activity", action: {
                 // Action to view all friends' activity
             })
             
             VStack(spacing: 15) {
                 ForEach(0..<3) { _ in
-                    FriendActivityRow()
+                    TMFriendActivityRow()
                 }
             }
             .padding(.horizontal)
@@ -265,14 +363,17 @@ struct HomeView: View {
     
     private var popularCuisinesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Popular Cuisines", action: {
+            TMSectionHeader(title: "Popular Cuisines", action: {
                 // Action to view all cuisines
             })
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20) {
                     ForEach(Cuisine.allCases) { cuisine in
-                        CuisineButton(cuisine: cuisine)
+                        TMCuisineButton(cuisine: cuisine) {
+                            selectedCuisineForSearch = cuisine
+                            navigateToSearch = true
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -282,14 +383,14 @@ struct HomeView: View {
     
     private var trendingDishesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Trending Dishes", action: {
+            TMSectionHeader(title: "Trending Dishes", action: {
                 // Action to view all trending dishes
             })
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20) {
                     ForEach(0..<5) { _ in
-                        TrendingDishCard()
+                        TMTrendingDishCard()
                     }
                 }
                 .padding(.horizontal)
@@ -299,13 +400,13 @@ struct HomeView: View {
     
     private var localEventsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Local Events", action: {
+            TMSectionHeader(title: "Local Events", action: {
                 // Action to view all local events
             })
             
             VStack(spacing: 15) {
                 ForEach(0..<2) { _ in
-                    LocalEventCard()
+                    TMLocalEventCard()
                 }
             }
             .padding(.horizontal)
@@ -314,14 +415,14 @@ struct HomeView: View {
     
     private var recommendedForYouSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Recommended for You", action: {
+            TMSectionHeader(title: "Recommended for You", action: {
                 // Action to view all recommendations
             })
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 20) {
                     ForEach(viewModel.recommendedRestaurants) { business in
-                        RecommendedRestaurantCard(business: business)
+                        TMRecommendedRestaurantCard(business: business)
                     }
                 }
                 .padding(.horizontal)
@@ -330,10 +431,192 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Restaurant Search View
+
+struct TMRestaurantSearchView: View {
+    @StateObject private var viewModel = TMRestaurantSearchViewModel()
+    @Environment(\.presentationMode) var presentationMode
+    
+    var selectedCuisine: Cuisine?
+    
+    // Example coordinates; in a real app, use user's current location
+    let latitude = 37.786882
+    let longitude = -122.399972
+    
+    var body: some View {
+        VStack {
+            VStack(spacing: 10) {
+                // Search Bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search for restaurants", text: $viewModel.searchText, onCommit: {
+                        viewModel.fetchRestaurants(latitude: latitude, longitude: longitude)
+                    })
+                    .font(.custom("Avenir", size: 16))
+                    .autocapitalization(.none)
+                }
+                .padding(12)
+                .background(Color(.systemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                
+                // Filters and Sort Options
+                HStack {
+                    // Sort Picker
+                    Picker("Sort By", selection: $viewModel.selectedSortOption) {
+                        ForEach(TMRestaurantSearchViewModel.SortOption.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .font(.custom("Avenir", size: 14))
+                    .padding(.horizontal)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        // Reset Filters
+                        viewModel.selectedCuisine = nil
+                        viewModel.searchText = ""
+                        viewModel.selectedSortOption = .bestMatch
+                        viewModel.fetchRestaurants(latitude: latitude, longitude: longitude)
+                    }) {
+                        Text("Reset")
+                            .font(.custom("Avenir", size: 14).weight(.medium))
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.trailing)
+                }
+            }
+            .padding(.top)
+            
+            // List of Restaurants
+            if viewModel.isLoading {
+                Spacer()
+                ProgressView("Loading...")
+                Spacer()
+            } else {
+                List(viewModel.restaurants) { business in
+                    TMRestaurantRow(business: business)
+                        .listRowInsets(EdgeInsets())
+                        .padding(.vertical, 5)
+                }
+                .listStyle(PlainListStyle())
+            }
+        }
+        .navigationBarTitle("Find Restaurants", displayMode: .inline)
+        .navigationBarItems(trailing: Button("Done") {
+            presentationMode.wrappedValue.dismiss()
+        })
+        .onAppear {
+            if let cuisine = selectedCuisine {
+                viewModel.selectedCuisine = cuisine
+            }
+            viewModel.fetchRestaurants(latitude: latitude, longitude: longitude)
+        }
+    }
+}
+
+// MARK: - Restaurant Row
+
+struct TMRestaurantRow: View {
+    let business: TMBusiness
+    @Environment(\.openURL) var openURLEnvironment
+    
+    var body: some View {
+        Button(action: {
+            if let url = URL(string: business.url) {
+                openURLEnvironment(url)
+            }
+        }) {
+            HStack(alignment: .top, spacing: 15) {
+                AsyncImage(url: URL(string: business.image_url ?? "")) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(width: 100, height: 100)
+                            .background(Color.gray.opacity(0.3))
+                            .cornerRadius(10)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 100, height: 100)
+                            .clipped()
+                            .cornerRadius(10)
+                    case .failure:
+                        Image(systemName: "photo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 100, height: 100)
+                            .background(Color.gray.opacity(0.3))
+                            .cornerRadius(10)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(business.name)
+                        .font(.custom("Didot", size: 18).weight(.semibold))
+                        .foregroundColor(.primary)
+                    
+                    Text(business.location.address1 ?? "")
+                        .font(.custom("Avenir", size: 14))
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                        Text(String(format: "%.1f", business.rating))
+                            .font(.custom("Avenir", size: 14).weight(.medium))
+                        Text("(\(business.review_count))")
+                            .font(.custom("Avenir", size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    HStack {
+                        Text(business.categories.map { $0.title }.joined(separator: ", "))
+                            .font(.custom("Avenir", size: 12))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        if let price = business.price {
+                            Text(price)
+                                .font(.custom("Avenir", size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Additional Views
+
+struct TMProfileView: View {
+    var body: some View {
+        Text("Profile View")
+            .font(.largeTitle)
+            .padding()
+    }
+}
+
+struct TMNewEventView: View {
+    var body: some View {
+        Text("New Event View")
+            .font(.largeTitle)
+            .padding()
+    }
+}
+
 // MARK: - Card Views
 
-struct FeaturedRestaurantCard: View {
-    let business: Business
+struct TMFeaturedRestaurantCard: View {
+    let business: TMBusiness
     @Environment(\.openURL) var openURLEnvironment
     
     var body: some View {
@@ -364,7 +647,7 @@ struct FeaturedRestaurantCard: View {
                                         VStack(alignment: .leading) {
                                             Text(business.name)
                                                 .font(.custom("Didot", size: 18).weight(.semibold))
-                                                .foregroundColor(.black) // Changed to black
+                                                .foregroundColor(.black)
                                                 .padding(.bottom, 2)
                                             
                                             HStack {
@@ -372,13 +655,13 @@ struct FeaturedRestaurantCard: View {
                                                     .foregroundColor(.yellow)
                                                 Text(String(format: "%.1f", business.rating))
                                                     .font(.custom("Avenir", size: 12).weight(.medium))
-                                                    .foregroundColor(.black) // Changed to black
+                                                    .foregroundColor(.black)
                                             }
                                         }
                                         Spacer()
                                     }
                                     .padding()
-                                    .background(Color.white.opacity(0.7)) // Added semi-transparent background
+                                    .background(Color.white.opacity(0.7))
                                     .cornerRadius(8)
                                     .padding([.leading, .bottom, .trailing], 8)
                                 }
@@ -415,8 +698,8 @@ struct FeaturedRestaurantCard: View {
     }
 }
 
-struct RecommendedRestaurantCard: View {
-    let business: Business
+struct TMRecommendedRestaurantCard: View {
+    let business: TMBusiness
     @Environment(\.openURL) var openURLEnvironment
     
     var body: some View {
@@ -482,7 +765,7 @@ struct RecommendedRestaurantCard: View {
     }
 }
 
-struct UpcomingReservationCard: View {
+struct TMUpcomingReservationCard: View {
     let id = UUID()
     
     var body: some View {
@@ -559,7 +842,7 @@ struct UpcomingReservationCard: View {
     }
 }
 
-struct TrendingDishCard: View {
+struct TMTrendingDishCard: View {
     let id = UUID()
     
     var body: some View {
@@ -612,7 +895,7 @@ struct TrendingDishCard: View {
     }
 }
 
-struct LocalEventCard: View {
+struct TMLocalEventCard: View {
     let id = UUID()
     
     var body: some View {
@@ -679,7 +962,7 @@ struct LocalEventCard: View {
     }
 }
 
-struct FriendActivityRow: View {
+struct TMFriendActivityRow: View {
     let id = UUID()
     
     var body: some View {
@@ -736,7 +1019,7 @@ struct FriendActivityRow: View {
     }
 }
 
-struct SectionHeader: View {
+struct TMSectionHeader: View {
     let title: String
     let action: () -> Void
     
@@ -755,7 +1038,7 @@ struct SectionHeader: View {
     }
 }
 
-struct QuickActionButton: View {
+struct TMQuickActionButton: View {
     let icon: String
     let title: String
     let action: () -> Void
@@ -807,39 +1090,32 @@ enum Cuisine: String, CaseIterable, Identifiable {
     }
 }
 
-struct CuisineButton: View {
+struct TMCuisineButton: View {
     let cuisine: Cuisine
+    let onSelect: () -> Void
     
     var body: some View {
-        VStack {
-            Text(cuisine.icon)
-                .font(.system(size: 36))
-                .frame(width: 70, height: 70)
-                .background(Color(.systemBackground))
-                .clipShape(Circle())
-                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-            
-            Text(cuisine.rawValue)
-                .font(.custom("Avenir", size: 12).weight(.medium))
-                .foregroundColor(.primary)
+        Button(action: onSelect) {
+            VStack {
+                Text(cuisine.icon)
+                    .font(.system(size: 36))
+                    .frame(width: 70, height: 70)
+                    .background(Color(.systemBackground))
+                    .clipShape(Circle())
+                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                
+                Text(cuisine.rawValue)
+                    .font(.custom("Avenir", size: 12).weight(.medium))
+                    .foregroundColor(.primary)
+            }
         }
-    }
-}
-
-// MARK: - Additional Views
-
-struct NewEventView: View {
-    var body: some View {
-        Text("New Event View")
-            .font(.largeTitle)
-            .padding()
     }
 }
 
 // MARK: - Preview
 
-struct HomeView_Previews: PreviewProvider {
+struct TMHomeView_Previews: PreviewProvider {
     static var previews: some View {
-        HomeView()
+        TMHomeView()
     }
 }
